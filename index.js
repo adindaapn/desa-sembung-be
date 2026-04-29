@@ -18,12 +18,19 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // === MIDDLEWARE ===
-app.use(cors());
+// Konfigurasi CORS yang lebih luas untuk menghindari blokir browser
+app.use(
+  cors({
+    origin: "*",
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  }),
+);
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// === KONFIGURASI STATIC FOLDER (Foto Profil, Berkas, & Berita) ===
-// Cukup satu baris ini untuk semua folder di dalam 'uploads'
+// === KONFIGURASI STATIC FOLDER ===
 app.use(
   "/uploads",
   express.static(path.join(__dirname, "uploads"), {
@@ -34,7 +41,7 @@ app.use(
 );
 
 // === KONFIGURASI WHATSAPP BOT ===
-global.isWhatsappReady = false; // Guard agar controller tidak error saat bot belum login
+global.isWhatsappReady = false;
 
 const whatsapp = new Client({
   authStrategy: new LocalAuth(),
@@ -44,46 +51,43 @@ const whatsapp = new Client({
       "--no-sandbox",
       "--disable-setuid-sandbox",
       "--disable-dev-shm-usage",
-      "--disable-accelerated-2d-canvas",
-      "--no-first-run",
       "--no-zygote",
-      "--disable-gpu",
     ],
   },
 });
 
-// Event: Tampilkan QR Code di terminal
+// Event: QR Code
 whatsapp.on("qr", (qr) => {
-  console.log("--------------------------------------------------");
-  console.log("📱 SCAN QR CODE INI UNTUK CONNECT WHATSAPP DESA:");
+  console.log("📱 SCAN QR CODE DI TERMINAL RAILWAY:");
   qrcode.generate(qr, { small: true });
-  console.log("--------------------------------------------------");
 });
 
-// Event: WhatsApp Siap
+// Event: Ready
 whatsapp.on("ready", () => {
-  console.log("✅ WhatsApp Bot Berhasil Terhubung dan Siap!");
+  console.log("✅ WhatsApp Bot Terhubung!");
   global.isWhatsappReady = true;
 });
 
-// Event: Terputus
+// Event: Disconnected
 whatsapp.on("disconnected", (reason) => {
   console.log("⚠️ WhatsApp Bot Terputus:", reason);
   global.isWhatsappReady = false;
-  // Mencoba inisialisasi ulang
-  whatsapp.initialize();
+  try {
+    whatsapp.initialize();
+  } catch (error) {
+    console.error("Gagal restart WhatsApp:", error);
+  }
 });
 
-// Event: Gagal Login
-whatsapp.on("auth_failure", (msg) => {
-  console.error("❌ Gagal Autentikasi WhatsApp:", msg);
-  global.isWhatsappReady = false;
+// Jalankan WhatsApp dengan Catch agar server tidak crash di hosting
+whatsapp.initialize().catch((err) => {
+  console.error(
+    "❌ WhatsApp Error (Kemungkinan masalah Puppeteer di Hosting):",
+    err.message,
+  );
+  console.log("ℹ️ Server tetap berjalan untuk API & Database.");
 });
 
-// Jalankan WhatsApp
-whatsapp.initialize();
-
-// Simpan ke Global Object
 global.whatsapp = whatsapp;
 
 // === API ROUTES ===
@@ -98,21 +102,22 @@ app.use("/api/statistik", statistikRoutes);
 app.get("/", (req, res) => {
   res.json({
     message: "✅ Server Backend Desa Sembung Berjalan!",
-    whatsapp_status: global.isWhatsappReady
-      ? "Connected"
-      : "Disconnected/Connecting",
+    whatsapp_status: global.isWhatsappReady ? "Connected" : "Disconnected",
+    database: "Connected to TiDB Cloud",
     time: new Date().toLocaleString("id-ID"),
   });
 });
 
-// === ERROR HANDLING MIDDLEWARE ===
+// === ERROR HANDLING ===
 app.use((err, req, res, next) => {
   console.error(err.stack);
-  res.status(500).json({ message: "Terjadi kesalahan pada server!" });
+  res.status(500).json({
+    message: "Terjadi kesalahan pada server!",
+    error: err.message,
+  });
 });
 
 // === JALANKAN SERVER ===
 app.listen(PORT, () => {
-  console.log(`🚀 Server berjalan di http://localhost:${PORT}`);
-  console.log(`📁 Folder Upload: ${path.join(__dirname, "uploads")}`);
+  console.log(`🚀 Server berjalan di Port: ${PORT}`);
 });
