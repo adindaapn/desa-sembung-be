@@ -1,20 +1,28 @@
 const db = require("../config/database");
 const multer = require("multer");
-const path = require("path");
+const { CloudinaryStorage } = require("multer-storage-cloudinary");
+const cloudinary = require("cloudinary").v2;
 
-// === KONFIGURASI STORAGE UNTUK GAMBAR BERITA ===
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, "uploads/berita/");
-  },
-  filename: (req, file, cb) => {
-    cb(null, Date.now() + path.extname(file.originalname));
+// Konfigurasi Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+// Cloudinary Storage untuk gambar berita
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: "desa-sembung/berita",
+    allowed_formats: ["jpg", "jpeg", "png"],
+    resource_type: "image",
   },
 });
 
 exports.uploadBeritaMiddleware = multer({ storage }).single("gambar");
 
-// === 1. AMBIL SEMUA BERITA (PUBLIK) ===
+// 1. AMBIL SEMUA BERITA (PUBLIK)
 exports.getBerita = (req, res) => {
   db.query(
     "SELECT * FROM tb_berita ORDER BY tgl_posting DESC",
@@ -25,7 +33,7 @@ exports.getBerita = (req, res) => {
   );
 };
 
-// === 2. AMBIL DETAIL SATU BERITA (PUBLIK) ===
+// 2. AMBIL DETAIL SATU BERITA (PUBLIK)
 exports.getBeritaById = (req, res) => {
   const { id } = req.params;
   db.query("SELECT * FROM tb_berita WHERE id = ?", [id], (err, results) => {
@@ -36,10 +44,11 @@ exports.getBeritaById = (req, res) => {
   });
 };
 
-// === 3. TAMBAH BERITA BARU (ADMIN) ===
+// 3. TAMBAH BERITA BARU (ADMIN)
 exports.createBerita = (req, res) => {
   const { judul, isi, kategori } = req.body;
-  const gambar = req.file ? req.file.filename : null;
+  // Cloudinary menyimpan URL di file.path
+  const gambar = req.file ? req.file.path : null;
 
   if (!judul || !isi || !kategori) {
     return res
@@ -58,7 +67,7 @@ exports.createBerita = (req, res) => {
   });
 };
 
-// === 4. UPDATE BERITA (ADMIN) ===
+// 4. UPDATE BERITA (ADMIN)
 exports.updateBerita = (req, res) => {
   const { id } = req.params;
   const { judul, isi, kategori } = req.body;
@@ -69,9 +78,9 @@ exports.updateBerita = (req, res) => {
       .json({ message: "Judul, isi, dan kategori wajib diisi!" });
   }
 
-  // Jika ada gambar baru, update gambar juga. Jika tidak, biarkan gambar lama.
   if (req.file) {
-    const gambar = req.file.filename;
+    // Cloudinary menyimpan URL di file.path
+    const gambar = req.file.path;
     const query =
       "UPDATE tb_berita SET judul = ?, isi = ?, kategori = ?, gambar = ? WHERE id = ?";
     db.query(query, [judul, isi, kategori, gambar, id], (err) => {
@@ -88,7 +97,7 @@ exports.updateBerita = (req, res) => {
   }
 };
 
-// === 5. HAPUS BERITA (ADMIN) ===
+// 5. HAPUS BERITA (ADMIN)
 exports.deleteBerita = (req, res) => {
   const { id } = req.params;
   db.query("DELETE FROM tb_berita WHERE id = ?", [id], (err) => {

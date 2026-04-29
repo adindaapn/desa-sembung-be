@@ -1,19 +1,28 @@
 const db = require("../config/database");
 const multer = require("multer");
-const path = require("path");
+const { CloudinaryStorage } = require("multer-storage-cloudinary");
+const cloudinary = require("cloudinary").v2;
 
-// 1. Konfigurasi Multer
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, "uploads/");
-  },
-  filename: (req, file, cb) => {
-    cb(null, Date.now() + path.extname(file.originalname));
+// 1. Konfigurasi Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+// 2. Konfigurasi Multer + Cloudinary Storage
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: "desa-sembung",
+    allowed_formats: ["jpg", "jpeg", "png", "pdf"],
+    resource_type: "auto",
   },
 });
+
 const upload = multer({ storage: storage });
 
-// 2. Ambil Jenis Surat
+// 3. Ambil Jenis Surat
 exports.getJenisSurat = (req, res) => {
   db.query("SELECT * FROM tb_jenis_surat", (err, results) => {
     if (err) return res.status(500).json({ error: err.message });
@@ -21,15 +30,17 @@ exports.getJenisSurat = (req, res) => {
   });
 };
 
-// 3. Buat Pengajuan (Warga) - UPDATED
+// 4. Buat Pengajuan (Warga)
 exports.buatPengajuan = (req, res) => {
-  // Menangkap 'keperluan' yang dikirim dari Frontend
   const { user_id, jenis_surat_id, keperluan } = req.body;
   const file = req.file;
 
   if (!file) return res.status(400).json({ message: "Wajib upload berkas!" });
 
-  // Memasukkan data keperluan ke kolom keterangan_admin
+  // Cloudinary menyimpan URL di file.path
+  const fileUrl = file.path;
+  const fileName = file.originalname;
+
   const queryPengajuan = `
     INSERT INTO tb_pengajuan_surat (user_id, jenis_surat_id, status, keterangan_admin, tgl_pengajuan) 
     VALUES (?, ?, 'pending', ?, NOW())
@@ -43,22 +54,18 @@ exports.buatPengajuan = (req, res) => {
       const pengajuanId = result.insertId;
 
       const queryBerkas = `INSERT INTO tb_berkas_persyaratan (pengajuan_id, nama_file, path_file) VALUES (?, ?, ?)`;
-      db.query(
-        queryBerkas,
-        [pengajuanId, file.originalname, file.filename],
-        (err) => {
-          if (err) return res.status(500).json({ error: err.message });
-          res.status(201).json({
-            message: "Pengajuan berhasil dikirim!",
-            pengajuan_id: pengajuanId,
-          });
-        },
-      );
+      db.query(queryBerkas, [pengajuanId, fileName, fileUrl], (err) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.status(201).json({
+          message: "Pengajuan berhasil dikirim!",
+          pengajuan_id: pengajuanId,
+        });
+      });
     },
   );
 };
 
-// 4. Ambil Surat Pending (Admin)
+// 5. Ambil Surat Pending (Admin)
 exports.getPengajuanAdmin = (req, res) => {
   const query = `
     SELECT p.id, u.nama_lengkap, u.nik, j.nama_surat, p.tgl_pengajuan, p.status, p.file_hasil, b.nama_file, b.path_file  
@@ -75,25 +82,28 @@ exports.getPengajuanAdmin = (req, res) => {
   });
 };
 
-// 5. Upload File Hasil
+// 6. Upload File Hasil (Admin)
 exports.uploadSuratHasil = (req, res) => {
   const { id } = req.params;
   const file = req.file;
 
   if (!file) return res.status(400).json({ message: "File wajib diupload!" });
 
+  // Cloudinary menyimpan URL di file.path
+  const fileUrl = file.path;
+
   const queryUpdate =
     "UPDATE tb_pengajuan_surat SET file_hasil = ? WHERE id = ?";
-  db.query(queryUpdate, [file.filename, id], (err) => {
+  db.query(queryUpdate, [fileUrl, id], (err) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json({
       message: "File hasil berhasil diupload!",
-      filename: file.filename,
+      filename: fileUrl,
     });
   });
 };
 
-// 6. Verifikasi Surat (Admin) + Notifikasi WhatsApp
+// 7. Verifikasi Surat (Admin) + Notifikasi WhatsApp
 exports.verifikasiSurat = (req, res) => {
   const { id } = req.params;
   const { status, catatan } = req.body;
@@ -163,7 +173,7 @@ exports.verifikasiSurat = (req, res) => {
   });
 };
 
-// 7. Ambil Riwayat User (Warga)
+// 8. Ambil Riwayat User (Warga)
 exports.getPengajuanByUser = (req, res) => {
   const { userId } = req.params;
   const query = `
@@ -179,7 +189,7 @@ exports.getPengajuanByUser = (req, res) => {
   });
 };
 
-// 8. Ambil Riwayat Admin dengan Filter
+// 9. Ambil Riwayat Admin dengan Filter
 exports.getRiwayatAdmin = (req, res) => {
   const { bulan, tahun, status } = req.query;
   let query = `
@@ -208,7 +218,7 @@ exports.getRiwayatAdmin = (req, res) => {
   });
 };
 
-// 9. Dashboard Statistik (Admin)
+// 10. Dashboard Statistik (Admin)
 exports.getAllSurat = (req, res) => {
   const query = `
     SELECT p.id, u.nama_lengkap, j.nama_surat, p.tgl_pengajuan, p.status 
@@ -223,7 +233,7 @@ exports.getAllSurat = (req, res) => {
   });
 };
 
-// 10. Ambil Detail Pengajuan Spesifik
+// 11. Ambil Detail Pengajuan Spesifik
 exports.getDetailPengajuan = (req, res) => {
   const { id } = req.params;
   const query = `

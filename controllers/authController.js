@@ -2,20 +2,23 @@ const db = require("../config/database");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const multer = require("multer");
-const path = require("path");
-const fs = require("fs");
+const { CloudinaryStorage } = require("multer-storage-cloudinary");
+const cloudinary = require("cloudinary").v2;
 
-// BAGIAN INI TELAH DIPERBAIKI: Menghapus fs.mkdirSync agar tidak error di Vercel
-const uploadDir = "uploads/profile/";
+// Konfigurasi Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
-// --- KONFIGURASI MULTER ---
-// Catatan: Di Vercel, penyimpanan lokal bersifat sementara.
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    cb(null, "profile-" + Date.now() + path.extname(file.originalname));
+// Cloudinary Storage untuk foto profil
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: "desa-sembung/profile",
+    allowed_formats: ["jpg", "jpeg", "png"],
+    resource_type: "image",
   },
 });
 
@@ -135,11 +138,9 @@ exports.updateProfile = (req, res) => {
     const { nama_lengkap, username, email, no_hp, password } = req.body;
 
     if (!nama_lengkap || !email) {
-      return res
-        .status(400)
-        .json({
-          message: "Data tidak lengkap! Nama lengkap dan email wajib diisi.",
-        });
+      return res.status(400).json({
+        message: "Data tidak lengkap! Nama lengkap dan email wajib diisi.",
+      });
     }
 
     const getQuery = "SELECT * FROM tb_users WHERE id = ?";
@@ -159,8 +160,9 @@ exports.updateProfile = (req, res) => {
       ];
 
       if (req.file) {
+        // Cloudinary menyimpan URL di file.path
         query += ", foto = ?";
-        params.push(req.file.filename);
+        params.push(req.file.path);
       }
 
       if (password && password.trim() !== "" && password !== "undefined") {
@@ -176,7 +178,7 @@ exports.updateProfile = (req, res) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json({
           message: "Profil berhasil diperbarui!",
-          foto: req.file ? req.file.filename : oldData.foto,
+          foto: req.file ? req.file.path : oldData.foto,
           user: {
             nama_lengkap: params[0],
             username: params[1],
