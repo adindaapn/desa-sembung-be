@@ -1,14 +1,18 @@
 const mysql = require("mysql2");
 
-// Buat koneksi ke database
+require("dotenv").config();
+
 const db = mysql.createConnection({
-  host: "localhost",
-  user: "root", // Default user XAMPP
-  password: "", // Default password XAMPP (kosong)
-  database: "desa sembung", // Nama database yang kita buat di awal
+  host: process.env.DB_HOST,
+  port: parseInt(process.env.DB_PORT) || 4000,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASS,
+  database: process.env.DB_NAME,
+  ssl: {
+    rejectUnauthorized: false,
+  },
 });
 
-// Cek koneksi
 db.connect((err) => {
   if (err) {
     console.error("❌ Gagal koneksi ke Database:", err.message);
