@@ -2,8 +2,9 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const path = require("path");
-const { Client, LocalAuth } = require("whatsapp-web.js");
-const qrcode = require("qrcode-terminal");
+// WhatsApp ditutup sementara agar RAM tidak penuh dan Database lancar
+// const { Client, LocalAuth } = require("whatsapp-web.js");
+// const qrcode = require("qrcode-terminal");
 
 // Import Routes
 const db = require("./config/database");
@@ -18,7 +19,6 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // === MIDDLEWARE ===
-// Konfigurasi CORS yang lebih luas untuk menghindari blokir browser
 app.use(
   cors({
     origin: "*",
@@ -40,9 +40,9 @@ app.use(
   }),
 );
 
-// === KONFIGURASI WHATSAPP BOT ===
+// === KONFIGURASI WHATSAPP BOT (DIMATIKAN UNTUK RAILWAY) ===
 global.isWhatsappReady = false;
-
+/*
 const whatsapp = new Client({
   authStrategy: new LocalAuth(),
   puppeteer: {
@@ -56,39 +56,22 @@ const whatsapp = new Client({
   },
 });
 
-// Event: QR Code
 whatsapp.on("qr", (qr) => {
   console.log("📱 SCAN QR CODE DI TERMINAL RAILWAY:");
   qrcode.generate(qr, { small: true });
 });
 
-// Event: Ready
 whatsapp.on("ready", () => {
   console.log("✅ WhatsApp Bot Terhubung!");
   global.isWhatsappReady = true;
 });
 
-// Event: Disconnected
-whatsapp.on("disconnected", (reason) => {
-  console.log("⚠️ WhatsApp Bot Terputus:", reason);
-  global.isWhatsappReady = false;
-  try {
-    // whatsapp.initialize();
-  } catch (error) {
-    console.error("Gagal restart WhatsApp:", error);
-  }
-});
-
-// Jalankan WhatsApp dengan Catch agar server tidak crash di hosting
 whatsapp.initialize().catch((err) => {
-  console.error(
-    "❌ WhatsApp Error (Kemungkinan masalah Puppeteer di Hosting):",
-    err.message,
-  );
-  console.log("ℹ️ Server tetap berjalan untuk API & Database.");
+  console.error("❌ WhatsApp Error:", err.message);
 });
 
 global.whatsapp = whatsapp;
+*/
 
 // === API ROUTES ===
 app.use("/api/auth", authRoutes);
@@ -102,8 +85,8 @@ app.use("/api/statistik", statistikRoutes);
 app.get("/", (req, res) => {
   res.json({
     message: "✅ Server Backend Desa Sembung Berjalan!",
-    whatsapp_status: global.isWhatsappReady ? "Connected" : "Disconnected",
-    database: "Connected to TiDB Cloud",
+    whatsapp_status: "Disabled for Stability",
+    database: "Connecting...",
     time: new Date().toLocaleString("id-ID"),
   });
 });
