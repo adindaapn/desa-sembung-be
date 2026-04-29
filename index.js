@@ -73,7 +73,7 @@ whatsapp.on("disconnected", (reason) => {
   console.log("⚠️ WhatsApp Bot Terputus:", reason);
   global.isWhatsappReady = false;
   try {
-    whatsapp.initialize();
+    // whatsapp.initialize();
   } catch (error) {
     console.error("Gagal restart WhatsApp:", error);
   }
