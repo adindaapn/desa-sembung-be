@@ -38,6 +38,10 @@ exports.buatPengajuan = (req, res) => {
   const { user_id, jenis_surat_id, keperluan } = req.body;
   const file = req.file;
 
+  console.log("BODY:", req.body);
+  console.log("FILE:", file);
+  console.log("user_id:", user_id, "jenis_surat_id:", jenis_surat_id);
+
   if (!file) return res.status(400).json({ message: "Wajib upload berkas!" });
 
   // Cloudinary menyimpan URL di file.path

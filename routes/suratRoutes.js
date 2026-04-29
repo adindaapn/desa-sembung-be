@@ -9,7 +9,15 @@ router.get("/jenis", suratController.getJenisSurat);
 // 2. Submit Pengajuan (Warga)
 router.post(
   "/ajukan",
-  suratController.uploadMiddleware,
+  (req, res, next) => {
+    suratController.uploadMiddleware(req, res, (err) => {
+      if (err) {
+        console.error("Multer error:", err);
+        return res.status(500).json({ error: err.message });
+      }
+      next();
+    });
+  },
   suratController.buatPengajuan,
 );
 
