@@ -5,14 +5,11 @@ const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
 
-// Pastikan folder uploads/profile/ ada
+// BAGIAN INI TELAH DIPERBAIKI: Menghapus fs.mkdirSync agar tidak error di Vercel
 const uploadDir = "uploads/profile/";
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-  console.log("✅ Folder uploads/profile/ berhasil dibuat");
-}
 
 // --- KONFIGURASI MULTER ---
+// Catatan: Di Vercel, penyimpanan lokal bersifat sementara.
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, uploadDir);
@@ -192,7 +189,7 @@ exports.updateProfile = (req, res) => {
   });
 };
 
-// 5. GET ALL WARGA (Untuk Data Penduduk Admin)
+// 5. GET ALL WARGA
 exports.getAllWarga = (req, res) => {
   const query =
     "SELECT id, nik, nama_lengkap, email, no_hp, username, foto FROM tb_users WHERE role = 'warga' ORDER BY nama_lengkap ASC";
@@ -201,8 +198,6 @@ exports.getAllWarga = (req, res) => {
     res.json(results);
   });
 };
-
-// --- FITUR BARU: LUPA PASSWORD DENGAN OTP WHATSAPP ---
 
 // 6. KIRIM OTP KE WHATSAPP
 exports.sendOTP = async (req, res) => {
@@ -219,8 +214,8 @@ exports.sendOTP = async (req, res) => {
         return res.status(404).json({ message: "Data tidak ditemukan!" });
 
       const user = results[0];
-      const otp = Math.floor(100000 + Math.random() * 900000).toString(); // Generate 6 digit
-      const expiry = new Date(Date.now() + 5 * 60000); // Berlaku 5 menit
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+      const expiry = new Date(Date.now() + 5 * 60000);
 
       db.query(
         "UPDATE tb_users SET reset_otp = ?, reset_otp_expiry = ? WHERE id = ?",
@@ -229,20 +224,14 @@ exports.sendOTP = async (req, res) => {
           if (updateErr)
             return res.status(500).json({ error: updateErr.message });
 
-          // Kirim OTP via WhatsApp (Menggunakan global.whatsapp dari backend Anda)
           if (global.whatsapp) {
             let nomorWa = user.no_hp.replace(/[^0-9]/g, "");
             if (nomorWa.startsWith("0")) nomorWa = "62" + nomorWa.slice(1);
-
-            const pesan = `*KODE VERIFIKASI DESA SEMBUNG*\n\nHalo *${user.nama_lengkap}*,\n\nKode OTP Anda adalah: *${otp}*\n\nKode ini berlaku selama 5 menit. Jangan berikan kode ini kepada siapapun termasuk petugas desa.`;
+            const pesan = `*KODE VERIFIKASI DESA SEMBUNG*\n\nHalo *${user.nama_lengkap}*,\n\nKode OTP Anda adalah: *${otp}*\n\nKode ini berlaku selama 5 menit.`;
 
             global.whatsapp
               .sendMessage(nomorWa + "@c.us", pesan)
-              .then(() =>
-                res.json({
-                  message: "Kode OTP telah dikirim ke WhatsApp Anda.",
-                }),
-              )
+              .then(() => res.json({ message: "Kode OTP telah dikirim." }))
               .catch(() =>
                 res.status(500).json({ message: "Gagal mengirim WhatsApp." }),
               );
@@ -269,22 +258,17 @@ exports.resetPasswordWithOTP = async (req, res) => {
     async (err, results) => {
       if (err) return res.status(500).json({ error: err.message });
       if (results.length === 0)
-        return res
-          .status(400)
-          .json({ message: "Kode OTP salah atau data tidak cocok." });
+        return res.status(400).json({ message: "Kode OTP salah." });
 
       const user = results[0];
       if (new Date() > new Date(user.reset_otp_expiry))
-        return res.status(400).json({ message: "Kode OTP sudah kadaluarsa." });
+        return res.status(400).json({ message: "Kode OTP kadaluarsa." });
 
       const hashedPassword = await bcrypt.hash(newPassword, 10);
       db.query(
         "UPDATE tb_users SET password = ?, reset_otp = NULL, reset_otp_expiry = NULL WHERE id = ?",
         [hashedPassword, user.id],
-        () =>
-          res.json({
-            message: "Password berhasil diperbarui! Silakan login kembali.",
-          }),
+        () => res.json({ message: "Password berhasil diperbarui!" }),
       );
     },
   );
