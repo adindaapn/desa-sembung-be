@@ -1,5 +1,5 @@
 const db = require("../config/database");
-const bcrypt = require("bcrypt");
+const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const multer = require("multer");
 const { CloudinaryStorage } = require("multer-storage-cloudinary");
