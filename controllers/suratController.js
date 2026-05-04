@@ -24,7 +24,7 @@ const storage = new CloudinaryStorage({
       resource_type: isPdf ? "raw" : "image",
       allowed_formats: ["jpg", "jpeg", "png", "pdf"],
       public_id: isPdf
-        ? `${path.basename(file.originalname, ".pdf")}_${Date.now()}`
+        ? `${path.basename(file.originalname, ".pdf").replace(/[^a-zA-Z0-9]/g, "_")}_${Date.now()}` // ← ganti baris ini
         : undefined,
       format: isPdf ? "pdf" : undefined,
     };
