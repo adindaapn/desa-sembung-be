@@ -1,8 +1,6 @@
 const db = require("../config/database");
 const multer = require("multer");
-const { CloudinaryStorage } = require("multer-storage-cloudinary");
 const cloudinary = require("cloudinary").v2;
-const path = require("path");
 
 // 1. Konfigurasi Cloudinary
 cloudinary.config({
@@ -11,28 +9,9 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-console.log("CLOUD NAME:", process.env.CLOUDINARY_CLOUD_NAME);
-console.log("API KEY:", process.env.CLOUDINARY_API_KEY);
-
-// 2. Konfigurasi Multer + Cloudinary Storage
-const storage = new CloudinaryStorage({
-  cloudinary: cloudinary,
-  params: async (req, file) => {
-    const isPdf = file.mimetype === "application/pdf";
-    return {
-      folder: "desa-sembung",
-      resource_type: isPdf ? "raw" : "image",
-      allowed_formats: ["jpg", "jpeg", "png", "pdf"],
-      public_id: isPdf
-        ? `${path.basename(file.originalname, ".pdf").replace(/[^a-zA-Z0-9]/g, "_")}_${Date.now()}` // ← ganti baris ini
-        : undefined,
-      format: isPdf ? "pdf" : undefined,
-    };
-  },
-});
-
+// 2. Konfigurasi Multer - pakai memoryStorage
 const upload = multer({
-  storage: storage,
+  storage: multer.memoryStorage(),
   fileFilter: (req, file, cb) => {
     const allowed = ["image/jpeg", "image/jpg", "image/png", "application/pdf"];
     if (allowed.includes(file.mimetype)) {
@@ -53,47 +32,60 @@ exports.getJenisSurat = (req, res) => {
 };
 
 // 4. Buat Pengajuan (Warga)
-exports.buatPengajuan = (req, res) => {
+exports.buatPengajuan = async (req, res) => {
   const { user_id, jenis_surat_id, keperluan } = req.body;
   const file = req.file;
 
-  console.log("FILE OBJECT:", JSON.stringify(file, null, 2));
-
-  console.log("BODY:", req.body);
-  console.log("FILE:", file);
-  console.log("user_id:", user_id, "jenis_surat_id:", jenis_surat_id);
-
   if (!file) return res.status(400).json({ message: "Wajib upload berkas!" });
 
-  // Cloudinary menyimpan URL di file.path
-  let fileUrl = file.secure_url || file.path;
-  if (file.mimetype === "application/pdf" && !fileUrl.endsWith(".pdf")) {
-    fileUrl = fileUrl + ".pdf";
-  }
-  const fileName = file.originalname;
+  try {
+    const isPdf = file.mimetype === "application/pdf";
 
-  const queryPengajuan = `
-    INSERT INTO tb_pengajuan_surat (user_id, jenis_surat_id, status, keterangan_admin, tgl_pengajuan) 
-    VALUES (?, ?, 'pending', ?, NOW())
-  `;
+    const uploadResult = await new Promise((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        {
+          folder: "desa-sembung",
+          resource_type: isPdf ? "raw" : "image",
+          public_id: `surat_${Date.now()}`,
+          format: isPdf ? "pdf" : undefined,
+        },
+        (error, result) => {
+          if (error) reject(error);
+          else resolve(result);
+        },
+      );
+      stream.end(file.buffer);
+    });
 
-  db.query(
-    queryPengajuan,
-    [user_id, jenis_surat_id, keperluan],
-    (err, result) => {
-      if (err) return res.status(500).json({ error: err.message });
-      const pengajuanId = result.insertId;
+    const fileUrl = uploadResult.secure_url;
+    const fileName = file.originalname;
 
-      const queryBerkas = `INSERT INTO tb_berkas_persyaratan (pengajuan_id, nama_file, path_file) VALUES (?, ?, ?)`;
-      db.query(queryBerkas, [pengajuanId, fileName, fileUrl], (err) => {
+    console.log("Upload sukses, URL:", fileUrl);
+
+    const queryPengajuan = `INSERT INTO tb_pengajuan_surat (user_id, jenis_surat_id, status, keterangan_admin, tgl_pengajuan) VALUES (?, ?, 'pending', ?, NOW())`;
+    db.query(
+      queryPengajuan,
+      [user_id, jenis_surat_id, keperluan],
+      (err, result) => {
         if (err) return res.status(500).json({ error: err.message });
-        res.status(201).json({
-          message: "Pengajuan berhasil dikirim!",
-          pengajuan_id: pengajuanId,
+        const pengajuanId = result.insertId;
+
+        const queryBerkas = `INSERT INTO tb_berkas_persyaratan (pengajuan_id, nama_file, path_file) VALUES (?, ?, ?)`;
+        db.query(queryBerkas, [pengajuanId, fileName, fileUrl], (err) => {
+          if (err) return res.status(500).json({ error: err.message });
+          res
+            .status(201)
+            .json({
+              message: "Pengajuan berhasil dikirim!",
+              pengajuan_id: pengajuanId,
+            });
         });
-      });
-    },
-  );
+      },
+    );
+  } catch (err) {
+    console.error("Upload error:", err);
+    res.status(500).json({ error: "Gagal upload file ke Cloudinary" });
+  }
 };
 
 // 5. Ambil Surat Pending (Admin)
@@ -114,24 +106,42 @@ exports.getPengajuanAdmin = (req, res) => {
 };
 
 // 6. Upload File Hasil (Admin)
-exports.uploadSuratHasil = (req, res) => {
+exports.uploadSuratHasil = async (req, res) => {
   const { id } = req.params;
   const file = req.file;
 
   if (!file) return res.status(400).json({ message: "File wajib diupload!" });
 
-  // Cloudinary menyimpan URL di file.path
-  const fileUrl = file.path;
+  try {
+    const isPdf = file.mimetype === "application/pdf";
 
-  const queryUpdate =
-    "UPDATE tb_pengajuan_surat SET file_hasil = ? WHERE id = ?";
-  db.query(queryUpdate, [fileUrl, id], (err) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json({
-      message: "File hasil berhasil diupload!",
-      filename: fileUrl,
+    const uploadResult = await new Promise((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        {
+          folder: "desa-sembung",
+          resource_type: isPdf ? "raw" : "image",
+          public_id: `hasil_${Date.now()}`,
+          format: isPdf ? "pdf" : undefined,
+        },
+        (error, result) => {
+          if (error) reject(error);
+          else resolve(result);
+        },
+      );
+      stream.end(file.buffer);
     });
-  });
+
+    const fileUrl = uploadResult.secure_url;
+    const queryUpdate =
+      "UPDATE tb_pengajuan_surat SET file_hasil = ? WHERE id = ?";
+    db.query(queryUpdate, [fileUrl, id], (err) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ message: "File hasil berhasil diupload!", filename: fileUrl });
+    });
+  } catch (err) {
+    console.error("Upload error:", err);
+    res.status(500).json({ error: "Gagal upload file ke Cloudinary" });
+  }
 };
 
 // 7. Verifikasi Surat (Admin) + Notifikasi WhatsApp
@@ -171,9 +181,7 @@ exports.verifikasiSurat = (req, res) => {
         db.query(queryLog, [id, statusLama, status], () => {
           if (global.whatsapp) {
             let nomorWa = dataSurat.no_hp.replace(/[^0-9]/g, "");
-            if (nomorWa.startsWith("0")) {
-              nomorWa = "62" + nomorWa.slice(1);
-            }
+            if (nomorWa.startsWith("0")) nomorWa = "62" + nomorWa.slice(1);
             const chatId = nomorWa + "@c.us";
 
             const statusText =
@@ -269,16 +277,8 @@ exports.getDetailPengajuan = (req, res) => {
   const { id } = req.params;
   const query = `
     SELECT 
-      p.id, 
-      u.nama_lengkap, 
-      u.nik, 
-      j.nama_surat, 
-      p.tgl_pengajuan, 
-      p.status, 
-      p.file_hasil, 
-      b.path_file,
-      p.keterangan_admin AS keperluan,
-      p.catatan_penolakan 
+      p.id, u.nama_lengkap, u.nik, j.nama_surat, p.tgl_pengajuan, p.status, 
+      p.file_hasil, b.path_file, p.keterangan_admin AS keperluan, p.catatan_penolakan 
     FROM tb_pengajuan_surat p
     JOIN tb_users u ON p.user_id = u.id
     JOIN tb_jenis_surat j ON p.jenis_surat_id = j.id
@@ -287,14 +287,9 @@ exports.getDetailPengajuan = (req, res) => {
   `;
 
   db.query(query, [id], (err, results) => {
-    if (err) {
-      console.error("Pesan Error:", err.message);
-      return res.status(500).json({ error: err.message });
-    }
-
+    if (err) return res.status(500).json({ error: err.message });
     if (results.length === 0)
       return res.status(404).json({ message: "Data tidak ditemukan" });
-
     res.json(results[0]);
   });
 };
