@@ -78,6 +78,7 @@ exports.register = async (req, res) => {
 
 // 2. LOGIN
 exports.login = (req, res) => {
+  console.log("BODY:", req.body); // tambah ini
   const { identifier, password } = req.body;
   const query =
     "SELECT * FROM tb_users WHERE nik = ? OR username = ? OR email = ?";
