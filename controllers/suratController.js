@@ -16,14 +16,28 @@ console.log("API KEY:", process.env.CLOUDINARY_API_KEY);
 // 2. Konfigurasi Multer + Cloudinary Storage
 const storage = new CloudinaryStorage({
   cloudinary: cloudinary,
-  params: {
-    folder: "desa-sembung",
-    allowed_formats: ["jpg", "jpeg", "png", "pdf"],
-    resource_type: "auto",
+  params: async (req, file) => {
+    return {
+      folder: "desa-sembung",
+      resource_type: "auto",
+      allowed_formats: ["jpg", "jpeg", "png", "pdf"],
+      format: file.mimetype === "application/pdf" ? "pdf" : undefined,
+    };
   },
 });
 
-const upload = multer({ storage: storage });
+const upload = multer({
+  storage: storage,
+  fileFilter: (req, file, cb) => {
+    const allowed = ["image/jpeg", "image/jpg", "image/png", "application/pdf"];
+    if (allowed.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error("Format file tidak diizinkan!"), false);
+    }
+  },
+  limits: { fileSize: 5 * 1024 * 1024 },
+});
 
 // 3. Ambil Jenis Surat
 exports.getJenisSurat = (req, res) => {
