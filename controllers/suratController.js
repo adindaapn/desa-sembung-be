@@ -17,10 +17,12 @@ console.log("API KEY:", process.env.CLOUDINARY_API_KEY);
 const storage = new CloudinaryStorage({
   cloudinary: cloudinary,
   params: async (req, file) => {
+    const isPdf = file.mimetype === "application/pdf";
     return {
       folder: "desa-sembung",
-      resource_type: file.mimetype === "application/pdf" ? "raw" : "image",
+      resource_type: isPdf ? "raw" : "image",
       allowed_formats: ["jpg", "jpeg", "png", "pdf"],
+      format: isPdf ? "pdf" : undefined, // ← tambahan ini
     };
   },
 });
@@ -51,6 +53,8 @@ exports.buatPengajuan = (req, res) => {
   const { user_id, jenis_surat_id, keperluan } = req.body;
   const file = req.file;
 
+  console.log("FILE OBJECT:", JSON.stringify(file, null, 2));
+
   console.log("BODY:", req.body);
   console.log("FILE:", file);
   console.log("user_id:", user_id, "jenis_surat_id:", jenis_surat_id);
@@ -58,7 +62,7 @@ exports.buatPengajuan = (req, res) => {
   if (!file) return res.status(400).json({ message: "Wajib upload berkas!" });
 
   // Cloudinary menyimpan URL di file.path
-  const fileUrl = file.path;
+  const fileUrl = file.secure_url || file.path;
   const fileName = file.originalname;
 
   const queryPengajuan = `
