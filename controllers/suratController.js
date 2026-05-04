@@ -2,6 +2,7 @@ const db = require("../config/database");
 const multer = require("multer");
 const { CloudinaryStorage } = require("multer-storage-cloudinary");
 const cloudinary = require("cloudinary").v2;
+const path = require("path");
 
 // 1. Konfigurasi Cloudinary
 cloudinary.config({
@@ -22,7 +23,10 @@ const storage = new CloudinaryStorage({
       folder: "desa-sembung",
       resource_type: isPdf ? "raw" : "image",
       allowed_formats: ["jpg", "jpeg", "png", "pdf"],
-      format: isPdf ? "pdf" : undefined, // ← tambahan ini
+      public_id: isPdf
+        ? `${path.basename(file.originalname, ".pdf")}_${Date.now()}`
+        : undefined,
+      format: isPdf ? "pdf" : undefined,
     };
   },
 });
