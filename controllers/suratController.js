@@ -17,10 +17,13 @@ console.log("API KEY:", process.env.CLOUDINARY_API_KEY);
 const storage = new CloudinaryStorage({
   cloudinary: cloudinary,
   params: async (req, file) => {
+    const isPdf = file.mimetype === "application/pdf";
+    const filename = file.originalname.replace(/\.[^/.]+$/, ""); // hapus ekstensi lama
     return {
       folder: "desa-sembung",
-      resource_type: file.mimetype === "application/pdf" ? "raw" : "image",
+      resource_type: isPdf ? "raw" : "image",
       allowed_formats: ["jpg", "jpeg", "png", "pdf"],
+      public_id: isPdf ? `${filename}.pdf` : filename,
     };
   },
 });
