@@ -58,10 +58,7 @@ exports.buatPengajuan = (req, res) => {
   if (!file) return res.status(400).json({ message: "Wajib upload berkas!" });
 
   // Cloudinary menyimpan URL di file.path
-  let fileUrl = file.path;
-  if (file.mimetype === "application/pdf" && !fileUrl.endsWith(".pdf")) {
-    fileUrl = fileUrl + ".pdf";
-  }
+  const fileUrl = file.path;
   const fileName = file.originalname;
 
   const queryPengajuan = `
